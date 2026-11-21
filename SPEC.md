@@ -52,6 +52,8 @@ A small 🔒 icon in the top corner opens the parent PIN pad.
   - the name (short, large rounded font)
   - the points as a big badge, `🪙 5`
   - the frequency tag (small colored pill): `Chaque jour` · `Chaque semaine` · `Quand tu veux` · `Une fois`
+  - the optional description, in smaller text under the name
+  - if the task has a team bonus, a second badge `👫 Ensemble ★ 2`: the points **each** kid gets when all the kids complete the task together (alone they get the regular points)
 - Inactive tasks are not shown.
 
 #### La boutique
@@ -94,6 +96,8 @@ A small 🔒 icon in the top corner opens the parent PIN pad.
 | Emoji | emoji picker | required, single emoji |
 | Points | integer | required, 1–999 |
 | Catégorie | select (task categories) | required |
+| Description | textarea | optional, ≤ 120 chars |
+| Bonus d'équipe | toggle + integer | optional; points **each** kid gets when all kids do it together. Must be greater than the solo points, ≤ 999 |
 | Fréquence | select | `daily` / `weekly` / `anytime` / `once`, default `anytime` |
 | Active | toggle | default on |
 
@@ -176,6 +180,8 @@ create table tasks (
   points      int  not null check (points between 1 and 999),
   category_id uuid not null references categories(id) on delete restrict,
   frequency   task_frequency not null default 'anytime',
+  description text check (description is null or char_length(description) <= 120),
+  team_points int check (team_points is null or team_points between 1 and 999), -- each kid, when done together
   active      boolean not null default true,
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now()
@@ -233,7 +239,7 @@ Every admin function takes `p_pin text` as its first argument and calls the inte
 | `change_pin(p_pin, p_new) → jsonb` | Checks the current PIN (with lockout), validates the new one, stores the new hash and resets the counters |
 | `reset_pin() → void` | **SQL editor only** (no grant to `anon`/`authenticated`): deletes the PIN row |
 | `admin_list_tasks(p_pin)` / `admin_list_rewards(p_pin)` | Return all items, including inactive ones |
-| `upsert_task(p_pin, p_id, p_name, p_emoji, p_points, p_category_id, p_frequency, p_active) → tasks` | Create (when `p_id` is null) or update |
+| `upsert_task(p_pin, p_id, p_name, p_emoji, p_points, p_category_id, p_frequency, p_active, p_description, p_team_points) → tasks` | Create (when `p_id` is null) or update. A table check enforces `team_points > points` |
 | `delete_task(p_pin, p_id)` | Delete |
 | `upsert_reward(p_pin, p_id, p_name, p_emoji, p_cost, p_category_id, p_active) → rewards` | Create or update |
 | `delete_reward(p_pin, p_id)` | Delete |

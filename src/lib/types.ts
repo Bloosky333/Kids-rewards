@@ -19,6 +19,10 @@ export interface Task {
   category_id: string
   frequency: Frequency
   active: boolean
+  /** Short explanation shown under the name (≤120 chars). */
+  description: string | null
+  /** Points EACH kid gets when all kids complete the task together; null = no team bonus. */
+  team_points: number | null
 }
 
 export interface Reward {

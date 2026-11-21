@@ -16,7 +16,7 @@ export async function fetchCategories(): Promise<Category[]> {
 export async function fetchTasks(): Promise<Task[]> {
   const { data, error } = await supabase
     .from('tasks')
-    .select('id, name, emoji, points, category_id, frequency, active')
+    .select('id, name, emoji, points, category_id, frequency, active, description, team_points')
     .order('points')
     .order('name')
   if (error) throw error
@@ -64,6 +64,8 @@ export interface TaskInput {
   category_id: string
   frequency: Frequency
   active: boolean
+  description: string | null
+  team_points: number | null
 }
 export const upsertTask = (pin: string, t: TaskInput) =>
   rpc<Task>('upsert_task', {
@@ -75,6 +77,8 @@ export const upsertTask = (pin: string, t: TaskInput) =>
     p_category_id: t.category_id,
     p_frequency: t.frequency,
     p_active: t.active,
+    p_description: t.description,
+    p_team_points: t.team_points,
   })
 export const deleteTask = (pin: string, id: string) => rpc<null>('delete_task', { p_pin: pin, p_id: id })
 

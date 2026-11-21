@@ -12,6 +12,10 @@ export interface ItemDraft {
   category_id: string
   frequency: Frequency
   active: boolean
+  /** Tasks only */
+  description: string
+  /** Tasks only: points each kid gets when done together; null = no team bonus */
+  team: number | null
 }
 
 interface Props {
@@ -30,13 +34,14 @@ export function ItemForm({ kind, draft, categories, onCancel, onSave }: Props) {
   const set = <K extends keyof ItemDraft>(k: K, v: ItemDraft[K]) => setD((x) => ({ ...x, [k]: v }))
 
   const name = d.name.trim()
-  const valid = name.length >= 1 && name.length <= 40 && !!d.emoji && Number.isInteger(d.value) && d.value >= 1 && d.value <= max && !!d.category_id
+  const teamOk = !isTask || d.team === null || (Number.isInteger(d.team) && d.team > d.value && d.team <= 999)
+  const valid = name.length >= 1 && name.length <= 40 && !!d.emoji && Number.isInteger(d.value) && d.value >= 1 && d.value <= max && !!d.category_id && teamOk && d.description.length <= 120
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
     if (!valid || busy) return
     setBusy(true)
-    await onSave({ ...d, name })
+    await onSave({ ...d, name, description: d.description.trim() })
     setBusy(false)
   }
 
@@ -94,6 +99,63 @@ export function ItemForm({ kind, draft, categories, onCancel, onSave }: Props) {
             </select>
           </label>
         </div>
+
+        {isTask && (
+          <label className="field">
+            <span className="field__label">
+              Description <span className="field__hint">(optionnel · {d.description.length}/120)</span>
+            </span>
+            <textarea
+              value={d.description}
+              maxLength={120}
+              rows={2}
+              onChange={(e) => set('description', e.target.value)}
+              placeholder="Lit fait, pyjama rangé sous l'oreiller"
+            />
+          </label>
+        )}
+
+        {isTask && (
+          <div className="team-box">
+            <label className="field field--inline">
+              <span className="switch">
+                <input
+                  type="checkbox"
+                  checked={d.team !== null}
+                  onChange={(e) => set('team', e.target.checked ? Math.max(d.value + 1, 2) : null)}
+                  aria-label="Bonus d'équipe"
+                />
+                <span className="switch__track" />
+              </span>
+              <span>👫 Bonus d'équipe</span>
+            </label>
+            {d.team !== null && (
+              <div className="team-box__body">
+                <label className="field">
+                  <span className="field__label">Points pour chacun si faite ensemble 🪙</span>
+                  <div className="stepper">
+                    <button type="button" onClick={() => set('team', Math.max(d.value + 1, (d.team ?? 0) - 1))} aria-label="Moins (équipe)">−</button>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min={d.value + 1}
+                      max={999}
+                      value={Number.isNaN(d.team) ? '' : d.team}
+                      onChange={(e) => set('team', parseInt(e.target.value, 10))}
+                      aria-label="Points d'équipe"
+                    />
+                    <button type="button" onClick={() => set('team', Math.min(999, (d.team || 0) + 1))} aria-label="Plus (équipe)">+</button>
+                  </div>
+                </label>
+                <p className={`team-box__hint ${teamOk ? '' : 'is-error'}`}>
+                  {teamOk
+                    ? <>Seul : ★ {d.value} · Tous ensemble : ★ {d.team} chacun</>
+                    : <>Doit être plus grand que les points en solo (★ {d.value})</>}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
 
         {isTask && (
           <fieldset className="field">

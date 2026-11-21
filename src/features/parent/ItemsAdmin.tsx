@@ -7,13 +7,20 @@ import { groupByCategory } from '../../lib/grouping'
 import { qk, useCategories } from '../../lib/queries'
 import type { CategoryKind, Reward, Task } from '../../lib/types'
 import { ConfirmDialog } from '../../components/Modal'
-import { PointsBadge } from '../../components/PointsBadge'
+import { PointsBadge, TeamBadge } from '../../components/PointsBadge'
 import { useAdminAction, useAdminQueryFn } from './useAdmin'
 import { ItemForm, type ItemDraft } from './ItemForm'
 
 type Item = (Task | Reward) & { value: number }
 
 const toItem = (x: Task | Reward): Item => ({ ...x, value: 'points' in x ? x.points : x.cost })
+
+const toDraft = (it: Item): ItemDraft => ({
+  id: it.id, name: it.name, emoji: it.emoji, value: it.value, category_id: it.category_id,
+  frequency: 'frequency' in it ? it.frequency : 'anytime', active: it.active,
+  description: 'description' in it ? it.description ?? '' : '',
+  team: 'team_points' in it ? it.team_points : null,
+})
 
 export function ItemsAdmin({ kind }: { kind: CategoryKind }) {
   const isTask = kind === 'task'
@@ -32,16 +39,12 @@ export function ItemsAdmin({ kind }: { kind: CategoryKind }) {
 
   const save = async (d: ItemDraft) => {
     const res = isTask
-      ? await run((pin) => upsertTask(pin, { id: d.id, name: d.name, emoji: d.emoji, points: d.value, category_id: d.category_id, frequency: d.frequency, active: d.active }), d.id ? 'Modifié ✅' : 'Ajouté ✅')
+      ? await run((pin) => upsertTask(pin, { id: d.id, name: d.name, emoji: d.emoji, points: d.value, category_id: d.category_id, frequency: d.frequency, active: d.active, description: d.description || null, team_points: d.team }), d.id ? 'Modifié ✅' : 'Ajouté ✅')
       : await run((pin) => upsertReward(pin, { id: d.id, name: d.name, emoji: d.emoji, cost: d.value, category_id: d.category_id, active: d.active }), d.id ? 'Modifié ✅' : 'Ajouté ✅')
     if (res.ok) setEditing(null)
   }
 
-  const toggleActive = (it: Item) =>
-    save({
-      id: it.id, name: it.name, emoji: it.emoji, value: it.value, category_id: it.category_id,
-      frequency: 'frequency' in it ? it.frequency : 'anytime', active: !it.active,
-    })
+  const toggleActive = (it: Item) => save({ ...toDraft(it), active: !it.active })
 
   const remove = async () => {
     if (!deleting) return
@@ -52,6 +55,7 @@ export function ItemsAdmin({ kind }: { kind: CategoryKind }) {
 
   const newDraft = (): ItemDraft => ({
     id: null, name: '', emoji: '', value: isTask ? 1 : 10, category_id: kindCats[0]?.id ?? '', frequency: 'anytime', active: true,
+    description: '', team: null,
   })
 
   return (
@@ -83,8 +87,10 @@ export function ItemsAdmin({ kind }: { kind: CategoryKind }) {
                 <span className="row__emoji" aria-hidden="true">{it.emoji}</span>
                 <span className="row__main">
                   <span className="row__name">{it.name}</span>
+                  {'description' in it && it.description && <span className="row__desc">{it.description}</span>}
                   <span className="row__meta">
                     <PointsBadge value={it.value} size="sm" />
+                    {'team_points' in it && it.team_points !== null && <TeamBadge value={it.team_points} size="sm" />}
                     {'frequency' in it && <span className="freq freq--sm">{frequencyLabel(it.frequency).label}</span>}
                     {!it.active && <span className="tag">Masqué</span>}
                   </span>
@@ -97,10 +103,7 @@ export function ItemsAdmin({ kind }: { kind: CategoryKind }) {
                   <button
                     className="icon-btn"
                     aria-label={`Modifier ${it.name}`}
-                    onClick={() => setEditing({
-                      id: it.id, name: it.name, emoji: it.emoji, value: it.value, category_id: it.category_id,
-                      frequency: 'frequency' in it ? it.frequency : 'anytime', active: it.active,
-                    })}
+                    onClick={() => setEditing(toDraft(it))}
                   >✏️</button>
                   <button className="icon-btn" aria-label={`Supprimer ${it.name}`} onClick={() => setDeleting(it)}>🗑️</button>
                 </span>

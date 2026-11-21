@@ -16,7 +16,7 @@ export function MissionsPage() {
       emptyText="Pas encore de missions ! Demande à papa ou maman 🙂"
       getKey={(t) => t.id}
       renderItem={(t, c, i) => (
-        <ItemCard emoji={t.emoji} name={t.name} value={t.points} color={c.color} frequency={t.frequency} index={i} />
+        <ItemCard emoji={t.emoji} name={t.name} value={t.points} color={c.color} frequency={t.frequency} description={t.description} teamPoints={t.team_points} index={i} />
       )}
     />
   )
