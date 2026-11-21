@@ -15,12 +15,10 @@ interface Props {
 export function ItemCard({ emoji, name, value, color, frequency, index }: Props) {
   const f = frequency ? frequencyLabel(frequency) : null
   return (
-    <article
-      className={`card c-${color}`}
-      style={{ '--i': index } as CSSProperties}
-      tabIndex={0}
-    >
-      <span className="card__emoji" role="img" aria-label={name}>{emoji}</span>
+    <article className={`card c-${color}`} style={{ '--i': index } as CSSProperties} tabIndex={0}>
+      <div className="card__bubble">
+        <span className="card__emoji" role="img" aria-label={name}>{emoji}</span>
+      </div>
       <h3 className="card__name">{name}</h3>
       <div className="card__footer">
         <PointsBadge value={value} />

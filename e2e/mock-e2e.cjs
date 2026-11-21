@@ -140,7 +140,7 @@ const until = async (fn, msg, ms = 5000) => { const t = Date.now(); while (!fn()
   });
   await step('Admin missions list incl. hidden toggle', async () => {
     await page.getByText('Se brosser les dents').waitFor();
-    await shot('05-admin-missions');
+    await page.waitForTimeout(700); await shot('05-admin-missions');
     await page.getByLabel('Faire son lit visible').click({ force: true });
     await page.getByText('Masqué', { exact: true }).waitFor();
     expect(db.tasks.find((t) => t.name === 'Faire son lit').active === false, 'inactive');

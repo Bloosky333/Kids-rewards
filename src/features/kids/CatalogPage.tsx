@@ -45,7 +45,7 @@ export function CatalogPage<T>({ title, titleEmoji, queries, groups, emptyText, 
           return (
             <section key={g.category.id} className={`group c-${g.category.color}`}>
               <h2 className="group__title">
-                <span className="group__emoji" aria-hidden="true">{g.category.emoji}</span>
+                <span className="group__icon" aria-hidden="true">{g.category.emoji}</span>
                 {g.category.name}
               </h2>
               <div className="grid">
