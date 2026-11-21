@@ -33,7 +33,13 @@ After 5 wrong codes, the server refuses PIN checks for 1 minute. Parent mode loc
 
 ## Deploy (Vercel)
 
-Import the GitHub repo in Vercel; `vercel.json` sets up the Vite build and SPA routing. No environment variables are required (`.env` is committed). To use other values, set `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` in the Vercel project.
+Live at **https://kids-rewards-rho.vercel.app**: Vercel project `kids-rewards`, linked to this GitHub repo. Every push to the production branch (currently `claude/kids-rewards-manager-7n9vzo`) redeploys automatically.
+
+`vercel.json` sets up the Vite build and SPA routing. No environment variables are required (`.env` is committed). To use other values, set `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` in the Vercel project.
+
+## Tests
+
+`e2e/mock-e2e.cjs` drives the production build in Chromium against an in-memory mock of the Supabase API, covering 14 scenarios: kids' lists, PIN setup and lockout, CRUD, change PIN, idle lock and offline. See the header of the file for usage.
 
 ## Install on the tablet
 
