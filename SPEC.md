@@ -14,7 +14,7 @@ Balances are **out of scope**. Kids are paid in physical fake bills, so the app 
 | Kid tracking | None, catalog only |
 | Main device | Shared family tablet |
 | Stack | React + Vite + TypeScript, installable PWA |
-| Backend | Supabase (existing, shared project): dedicated `kids_rewards` schema, RLS, RPC functions |
+| Backend | Supabase project **Personal** (`wqjylckpqxtmrcdottxn`, eu-central-1, shared with another app): dedicated `kids_rewards` schema, RLS, RPC functions |
 | Hosting | Vercel, auto-deploy from GitHub |
 | Language | French only |
 | Target age | 6–8 (early readers): big emoji, short words |
@@ -24,6 +24,9 @@ Balances are **out of scope**. Kids are paid in physical fake bills, so the app 
 | Admin protection | 4-digit PIN, verified **in the database** |
 | Parent mode | Locks again automatically after 5 min idle |
 | PIN brute force | Server-side: 1-minute lockout after 5 wrong codes |
+| First PIN | Set in the app on first use (setup screen) |
+| Change PIN | In parent mode: type the new PIN twice |
+| Lost PIN | Reset from the Supabase SQL editor (`select kids_rewards.reset_pin();`), then set a new one in the app |
 | Inactive items | Hidden from kids by RLS, not by the app |
 | Emoji picker | Full picker with French search |
 | Categories | Configurable (name, emoji, color, order), separate for tasks and rewards |
@@ -63,6 +66,13 @@ A small 🔒 icon in the top corner opens the parent PIN pad.
 
 ### 3.2 Parent mode (configuration)
 
+**First-time setup**
+- If no PIN exists yet (fresh install, or after a SQL reset), tapping 🔒 opens **"Choisis ton code parent"** instead of the unlock pad.
+- Enter 4 digits, then **"Confirme ton code"** and the same 4 digits again. If they don't match: "Les codes ne correspondent pas", and you start over.
+- On success, parent mode opens right away.
+- The server accepts this only while no PIN exists. Once a PIN is set, `setup_pin` always fails.
+- ⚠️ Whoever opens 🔒 first sets the PIN, so do it right after deploying or resetting.
+
 **Unlock**
 - Tapping 🔒 opens a full-screen PIN pad (4 digits, big buttons).
 - The PIN is checked by the server (`verify_pin` RPC). A wrong PIN shakes the pad and shows "Code incorrect".
@@ -74,6 +84,7 @@ A small 🔒 icon in the top corner opens the parent PIN pad.
 1. **Missions**: list, create, edit and delete tasks
 2. **Boutique**: list, create, edit and delete rewards
 3. **Catégories**: two sub-lists (Missions / Boutique) to create, edit, delete and reorder categories
+4. **⚙️ Réglages**: change the PIN and read the recovery instructions
 
 **Task form**
 
@@ -111,8 +122,18 @@ A small 🔒 icon in the top corner opens the parent PIN pad.
 - Tasks and rewards: a confirmation dialog, then a hard delete.
 - Categories: if any task or reward still uses it, the delete is refused with "Cette catégorie contient N élément(s). Déplace-les d'abord." Otherwise a confirmation, then delete.
 
-**PIN management**
-- There is no in-app PIN change. The initial PIN is set (and later changed) with a SQL snippet in the Supabase SQL editor; see §5.4.
+**Réglages screen**
+
+*Changer le code parent*
+1. A button opens the same big PIN pad: **"Nouveau code"**, 4 digits.
+2. Then **"Confirme le nouveau code"**, the same 4 digits again.
+3. If they match, the app calls `change_pin(current_pin_in_memory, new_pin)`. The PIN held in memory is replaced and a toast shows "Code modifié ✅". If they don't match: "Les codes ne correspondent pas", back to step 1.
+4. Parent mode stays unlocked. The current PIN is not asked for again because the session is already unlocked; the server still checks it, using the PIN held in memory.
+
+*Code oublié ?* (an information card in Réglages, plus a "Code oublié ?" link under the unlock pad)
+- Explains in French: "Ouvre Supabase → projet *Personal* → SQL Editor, puis exécute : `select kids_rewards.reset_pin();`. Ensuite, touche 🔒 dans l'app pour choisir un nouveau code."
+- A "Copier la commande" button copies the SQL to the clipboard.
+- Nothing is reset from the app itself, so kids can't use this path.
 
 ## 4. Non-functional requirements
 
@@ -197,6 +218,7 @@ create table app_settings (
 Every admin function takes `p_pin text` as its first argument and calls the internal `_check_pin(p_pin)`. Each function runs with `set search_path = kids_rewards, extensions` and is granted `execute` to `anon`. `_check_pin` itself is **not** granted to `anon`.
 
 **PIN check and lockout.** `_check_pin` does the following:
+0. If no `app_settings` row exists, it returns `not_set`.
 1. If `locked_until > now()`, it returns `locked`.
 2. If `crypt(p_pin, pin_hash) = pin_hash`, it resets `failed_attempts` to 0 and returns `ok`.
 3. Otherwise it increments `failed_attempts`. On the 5th failure it sets `locked_until = now() + interval '1 minute'` and resets the counter. It returns `invalid_pin`.
@@ -205,7 +227,11 @@ Every admin function takes `p_pin text` as its first argument and calls the inte
 
 | Function | Purpose |
 |---|---|
-| `verify_pin(p_pin) → jsonb` | Unlock check for the PIN pad |
+| `pin_status() → jsonb` | `{ "is_set": bool }`; tells 🔒 whether to show setup or unlock |
+| `setup_pin(p_new) → jsonb` | Only when no PIN exists: validates `^[0-9]{4}$` and inserts the hash with `on conflict do nothing`. Returns `already_set` otherwise |
+| `verify_pin(p_pin) → jsonb` | Unlock check for the PIN pad; returns `not_set` when no PIN exists |
+| `change_pin(p_pin, p_new) → jsonb` | Checks the current PIN (with lockout), validates the new one, stores the new hash and resets the counters |
+| `reset_pin() → void` | **SQL editor only** (no grant to `anon`/`authenticated`): deletes the PIN row |
 | `admin_list_tasks(p_pin)` / `admin_list_rewards(p_pin)` | Return all items, including inactive ones |
 | `upsert_task(p_pin, p_id, p_name, p_emoji, p_points, p_category_id, p_frequency, p_active) → tasks` | Create (when `p_id` is null) or update |
 | `delete_task(p_pin, p_id)` | Delete |
@@ -215,9 +241,19 @@ Every admin function takes `p_pin text` as its first argument and calls the inte
 | `reorder_categories(p_pin, p_kind, p_ids uuid[])` | Set `sort_order` from the array order |
 | `delete_category(p_pin, p_id)` | Returns `category_not_empty` with a count if the category is in use |
 
-The client maps the error codes to French messages. If any admin call returns `invalid_pin` or `locked` (for example, the PIN was changed in SQL), parent mode locks again.
+The client maps the error codes to French messages. If any admin call returns `invalid_pin`, `locked` or `not_set` (for example, the PIN was reset in SQL), parent mode locks again.
 
-### 5.4 Setting or changing the PIN (parents, via the SQL editor)
+### 5.4 Recovering a lost PIN (parents, via the SQL editor)
+
+Recommended: clear the PIN, then set a new one in the app's setup screen.
+
+```sql
+select kids_rewards.reset_pin();
+```
+
+`reset_pin()` deletes the `app_settings` row, which also clears the lockout. It is **not** granted to `anon` or `authenticated`, so only the SQL editor (`postgres`) can run it.
+
+Alternative: set a PIN directly.
 
 ```sql
 insert into kids_rewards.app_settings (id, pin_hash)
@@ -242,7 +278,7 @@ src/
   lib/api.ts                 # typed wrappers for selects + RPCs
   lib/types.ts               # generated with `supabase gen types`
   features/kids/MissionsPage.tsx, ShopPage.tsx, ItemCard.tsx, CategorySection.tsx
-  features/parent/PinPad.tsx, ParentLayout.tsx, TasksAdmin.tsx, RewardsAdmin.tsx,
+  features/parent/PinPad.tsx, PinSetup.tsx, SettingsPage.tsx, ParentLayout.tsx, TasksAdmin.tsx, RewardsAdmin.tsx,
                   CategoriesAdmin.tsx, forms/*, EmojiPicker.tsx
   features/parent/useParentSession.ts   # holds PIN in memory + idle timer (5 min)
   styles/                    # design tokens, CSS variables
@@ -251,7 +287,7 @@ src/
 - **Routing**: `/` → Missions, `/boutique` → Boutique, `/parent/*` → parent mode. The parent routes redirect to the PIN pad when locked.
 - **Data**: TanStack Query for caching and refetch on focus, persisted to IndexedDB for offline display.
 - **Emoji picker**: a full picker with French search, e.g. `emoji-mart` with `@emoji-mart/data` and the `fr` locale, lazy-loaded so only parent mode pays for its size.
-- **Env**: `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`, set in Vercel project settings.
+- **Env**: `VITE_SUPABASE_URL` (`https://wqjylckpqxtmrcdottxn.supabase.co`) and `VITE_SUPABASE_ANON_KEY` (the project's publishable key), set in Vercel project settings.
 
 ## 7. Visual design
 
@@ -268,20 +304,21 @@ src/
 - Kid profiles, balances, completion history, approvals
 - Multiple families or households, user accounts
 - Photo uploads
-- Changing the PIN in the app
+- PIN recovery inside the app (email, recovery codes): recovery goes through the SQL editor only
 - Languages other than French
 - Realtime sync between devices (data refreshes on focus instead)
 
 ## 9. Risks / notes
 
-- **Shared project**: the `kids_rewards` schema keeps this app isolated. If the other apps in the project have their own `anon` grants, check that they don't grant broad privileges on all schemas.
+- **Shared project**: *Personal* already holds another app's tables in `public`, including a `public.app_settings`, so the `kids_rewards` schema avoids name clashes and keeps this app isolated. If the other apps in the project have their own `anon` grants, check that they don't grant broad privileges on all schemas.
 - **Anon key is public**: this is expected. Security rests entirely on RLS plus the PIN-checked `security definer` functions. Run `get_advisors` (security) after each migration.
+- **Setup race**: after a deploy or a `reset_pin()`, the first person to tap 🔒 chooses the PIN. Set it straight away.
 - **4-digit PIN**: the lockout keeps a brute-force attack to at most 5 tries a minute, about 1.4 days to cover every PIN. That is acceptable for this use. Switch to 6 digits if you want more margin.
 
 ## 10. Milestones
 
-1. **DB**: `kids_rewards` schema migrations (tables, RLS, RPCs with lockout), expose the schema, seed, set the PIN
+1. **DB**: `kids_rewards` schema migrations on project *Personal* (tables, RLS, RPCs with lockout, setup, change and reset of the PIN), expose the schema, seed
 2. **Kids' views**: Missions + Boutique with the playful design, read-only
-3. **Parent mode**: PIN pad, idle lock, CRUD for tasks, rewards and categories
+3. **Parent mode**: first-PIN setup, PIN pad, idle lock, CRUD for tasks, rewards and categories, Réglages (change PIN, recovery help)
 4. **PWA + deploy**: manifest, icons, offline cache, Vercel deployment
 5. **Polish**: animations, empty states, test on the real tablet
