@@ -14,13 +14,11 @@ export async function fetchCategories(): Promise<Category[]> {
 }
 
 export async function fetchTasks(): Promise<Task[]> {
-  const { data, error } = await supabase
-    .from('tasks')
-    .select('id, name, emoji, points, category_id, frequency, active, description, team_points')
-    .order('points')
-    .order('name')
+  // select('*') + normalisation keeps this working whether or not the
+  // description/team_points migration has been applied yet.
+  const { data, error } = await supabase.from('tasks').select('*').order('points').order('name')
   if (error) throw error
-  return data as Task[]
+  return (data as Partial<Task>[]).map((t) => ({ ...t, description: t.description ?? null, team_points: t.team_points ?? null }) as Task)
 }
 
 export async function fetchRewards(): Promise<Reward[]> {
@@ -67,8 +65,8 @@ export interface TaskInput {
   description: string | null
   team_points: number | null
 }
-export const upsertTask = (pin: string, t: TaskInput) =>
-  rpc<Task>('upsert_task', {
+export async function upsertTask(pin: string, t: TaskInput): Promise<RpcResult<Task>> {
+  const base = {
     p_pin: pin,
     p_id: t.id,
     p_name: t.name,
@@ -77,9 +75,17 @@ export const upsertTask = (pin: string, t: TaskInput) =>
     p_category_id: t.category_id,
     p_frequency: t.frequency,
     p_active: t.active,
-    p_description: t.description,
-    p_team_points: t.team_points,
-  })
+  }
+  const { data, error } = await supabase.rpc('upsert_task', { ...base, p_description: t.description, p_team_points: t.team_points })
+  if (!error) return data as RpcResult<Task>
+  // PGRST202 = no function with these parameters: DB not migrated yet → save without the new fields.
+  if (error.code === 'PGRST202') {
+    console.warn('[rpc upsert_task] new parameters not available yet; saving without description/team points')
+    return rpc<Task>('upsert_task', base)
+  }
+  console.error('[rpc upsert_task]', error)
+  return { ok: false, error: 'network' }
+}
 export const deleteTask = (pin: string, id: string) => rpc<null>('delete_task', { p_pin: pin, p_id: id })
 
 export interface RewardInput {
