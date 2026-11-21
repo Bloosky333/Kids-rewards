@@ -285,8 +285,8 @@ src/
 ```
 
 - **Routing**: `/` → Missions, `/boutique` → Boutique, `/parent/*` → parent mode. The parent routes redirect to the PIN pad when locked.
-- **Data**: TanStack Query for caching and refetch on focus, persisted to IndexedDB for offline display.
-- **Emoji picker**: a full picker with French search, e.g. `emoji-mart` with `@emoji-mart/data` and the `fr` locale, lazy-loaded so only parent mode pays for its size.
+- **Data**: TanStack Query for caching and refetch on focus. The kids' lists (not admin data) are persisted to localStorage for offline display.
+- **Emoji picker**: `emoji-mart` with its `fr` UI locale. emoji-mart doesn't translate emoji names, so French labels and tags from `emojibase-data/fr` are merged into its search keywords ("chaussette" → 🧦; accent-free spellings work too). It is lazy-loaded so only parent mode pays for its size.
 - **Env**: `VITE_SUPABASE_URL` (`https://wqjylckpqxtmrcdottxn.supabase.co`) and `VITE_SUPABASE_ANON_KEY` (the project's publishable key), set in Vercel project settings.
 
 ## 7. Visual design
