@@ -14,7 +14,7 @@ Balances are **out of scope**. Kids are paid in physical fake bills, so the app 
 | Kid tracking | None, catalog only |
 | Main device | Shared family tablet |
 | Stack | React + Vite + TypeScript, installable PWA |
-| Backend | Supabase (existing project): Postgres, RLS, RPC functions |
+| Backend | Supabase (existing, shared project): dedicated `kids_rewards` schema, RLS, RPC functions |
 | Hosting | Vercel, auto-deploy from GitHub |
 | Language | French only |
 | Target age | 6–8 (early readers): big emoji, short words |
@@ -23,6 +23,9 @@ Balances are **out of scope**. Kids are paid in physical fake bills, so the app 
 | Style | Playful cards: rounded, colorful, pastel, light animations |
 | Admin protection | 4-digit PIN, verified **in the database** |
 | Parent mode | Locks again automatically after 5 min idle |
+| PIN brute force | Server-side: 1-minute lockout after 5 wrong codes |
+| Inactive items | Hidden from kids by RLS, not by the app |
+| Emoji picker | Full picker with French search |
 | Categories | Configurable (name, emoji, color, order), separate for tasks and rewards |
 | Category delete | Blocked while items still use it |
 
@@ -63,6 +66,7 @@ A small 🔒 icon in the top corner opens the parent PIN pad.
 **Unlock**
 - Tapping 🔒 opens a full-screen PIN pad (4 digits, big buttons).
 - The PIN is checked by the server (`verify_pin` RPC). A wrong PIN shakes the pad and shows "Code incorrect".
+- After **5 wrong codes in a row**, the server refuses every PIN check (including writes) for **1 minute**. The pad shows "Trop d'essais, attends 1 minute ⏳" with a countdown. A correct code resets the counter.
 - Once unlocked, the PIN stays **in memory only** (never in localStorage) and is sent with every write.
 - Parent mode locks again after **5 minutes with no interaction**, on the 🔓 "Verrouiller" button, or on page reload.
 
@@ -121,10 +125,14 @@ A small 🔒 icon in the top corner opens the parent PIN pad.
 
 ## 5. Data model (Supabase / Postgres)
 
+All objects live in a dedicated **`kids_rewards`** schema, because the Supabase project is shared with other apps. The schema must be added to **Project Settings → API → Exposed schemas**, and the client is created with `db: { schema: 'kids_rewards' }`. Grant `usage` on the schema to `anon`.
+
 ### 5.1 Tables
 
 ```sql
-create extension if not exists pgcrypto;
+create extension if not exists pgcrypto with schema extensions;
+create schema if not exists kids_rewards;
+set search_path = kids_rewards, extensions;
 
 create type category_kind as enum ('task', 'reward');
 create type task_frequency as enum ('daily', 'weekly', 'anytime', 'once');
@@ -165,8 +173,10 @@ create table rewards (
 
 -- Single-row settings table; never readable by clients.
 create table app_settings (
-  id        boolean primary key default true check (id),
-  pin_hash  text not null
+  id              boolean primary key default true check (id),
+  pin_hash        text not null,
+  failed_attempts int  not null default 0,
+  locked_until    timestamptz
 );
 ```
 
@@ -177,17 +187,25 @@ create table app_settings (
 ### 5.2 Row Level Security
 
 - RLS is **enabled** on all four tables.
-- `categories`, `tasks`, `rewards`: one `SELECT` policy for `anon` (tasks and rewards filtered to `active = true`, or the kid views filter in the query; see the open questions).
+- `categories`: a `SELECT` policy for `anon` that allows every row.
+- `tasks`, `rewards`: a `SELECT` policy for `anon` with `using (active)`, so inactive items never reach the kids' screens. Parents read everything through `admin_list_*`.
 - There are **no** insert, update or delete policies, so all writes from the client are denied.
 - `app_settings` has **no policies at all**, so the client cannot read it.
 
 ### 5.3 Write API (Postgres functions, `security definer`)
 
-Every write function takes `p_pin text` as its first argument. It calls the internal `_check_pin(p_pin)`, which raises `invalid_pin` when `crypt(p_pin, pin_hash) <> pin_hash`. Each function runs with `set search_path = public` and is granted `execute` to `anon`.
+Every admin function takes `p_pin text` as its first argument and calls the internal `_check_pin(p_pin)`. Each function runs with `set search_path = kids_rewards, extensions` and is granted `execute` to `anon`. `_check_pin` itself is **not** granted to `anon`.
+
+**PIN check and lockout.** `_check_pin` does the following:
+1. If `locked_until > now()`, it returns `locked`.
+2. If `crypt(p_pin, pin_hash) = pin_hash`, it resets `failed_attempts` to 0 and returns `ok`.
+3. Otherwise it increments `failed_attempts`. On the 5th failure it sets `locked_until = now() + interval '1 minute'` and resets the counter. It returns `invalid_pin`.
+
+> Implementation note: the failed-attempt counter must be **committed**, so admin functions must not `raise` on a bad PIN, because that would roll the increment back. Every admin RPC instead **returns `jsonb`** shaped like `{ "ok": true, "data": … }` or `{ "ok": false, "error": "invalid_pin" | "locked" | "category_not_empty" | …, "retry_after": 42, "count": 3 }`.
 
 | Function | Purpose |
 |---|---|
-| `verify_pin(p_pin) → boolean` | Unlock check for the PIN pad |
+| `verify_pin(p_pin) → jsonb` | Unlock check for the PIN pad |
 | `admin_list_tasks(p_pin)` / `admin_list_rewards(p_pin)` | Return all items, including inactive ones |
 | `upsert_task(p_pin, p_id, p_name, p_emoji, p_points, p_category_id, p_frequency, p_active) → tasks` | Create (when `p_id` is null) or update |
 | `delete_task(p_pin, p_id)` | Delete |
@@ -195,16 +213,17 @@ Every write function takes `p_pin text` as its first argument. It calls the inte
 | `delete_reward(p_pin, p_id)` | Delete |
 | `upsert_category(p_pin, p_id, p_kind, p_name, p_emoji, p_color) → categories` | Create or update; new categories go to the end of the order |
 | `reorder_categories(p_pin, p_kind, p_ids uuid[])` | Set `sort_order` from the array order |
-| `delete_category(p_pin, p_id)` | Raises `category_not_empty` with a count if the category is in use |
+| `delete_category(p_pin, p_id)` | Returns `category_not_empty` with a count if the category is in use |
 
-The client maps the error codes to French messages.
+The client maps the error codes to French messages. If any admin call returns `invalid_pin` or `locked` (for example, the PIN was changed in SQL), parent mode locks again.
 
 ### 5.4 Setting or changing the PIN (parents, via the SQL editor)
 
 ```sql
-insert into app_settings (id, pin_hash)
-values (true, crypt('1234', gen_salt('bf')))
-on conflict (id) do update set pin_hash = excluded.pin_hash;
+insert into kids_rewards.app_settings (id, pin_hash)
+values (true, extensions.crypt('1234', extensions.gen_salt('bf')))
+on conflict (id) do update
+  set pin_hash = excluded.pin_hash, failed_attempts = 0, locked_until = null;
 ```
 
 ### 5.5 Seed data (optional, for a first run)
@@ -231,7 +250,7 @@ src/
 
 - **Routing**: `/` → Missions, `/boutique` → Boutique, `/parent/*` → parent mode. The parent routes redirect to the PIN pad when locked.
 - **Data**: TanStack Query for caching and refetch on focus, persisted to IndexedDB for offline display.
-- **Emoji picker**: a lightweight library (e.g. `emoji-picker-react`) with French labels, or a curated grid of ~120 kid-relevant emoji. See the open questions.
+- **Emoji picker**: a full picker with French search, e.g. `emoji-mart` with `@emoji-mart/data` and the `fr` locale, lazy-loaded so only parent mode pays for its size.
 - **Env**: `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`, set in Vercel project settings.
 
 ## 7. Visual design
@@ -249,20 +268,19 @@ src/
 - Kid profiles, balances, completion history, approvals
 - Multiple families or households, user accounts
 - Photo uploads
-- Changing the PIN in the app, wrong-PIN lockout
+- Changing the PIN in the app
 - Languages other than French
 - Realtime sync between devices (data refreshes on focus instead)
 
-## 9. Open questions / risks
+## 9. Risks / notes
 
-1. **PIN brute force**: with no lockout, someone who has the public URL could try all 10,000 PINs against `verify_pin`. Risk is low for a family app with an unlisted URL. A cheap fix is a server-side delay or a counter in `app_settings`. Do you want it, or a longer PIN (6 digits)?
-2. **Inactive items for kids**: should RLS hide inactive items from `anon` (stricter), or should the kid views just filter them out (simpler)? Default: RLS hides them, and parents read everything through `admin_list_*`.
-3. **Emoji picker**: a full picker library or a curated kid-friendly grid? Default: the full library with French search, which is simple and flexible.
-4. **Existing Supabase project**: which project, and is it shared with other apps? If it is, we prefix the tables (e.g. `kr_tasks`) or use a dedicated schema.
+- **Shared project**: the `kids_rewards` schema keeps this app isolated. If the other apps in the project have their own `anon` grants, check that they don't grant broad privileges on all schemas.
+- **Anon key is public**: this is expected. Security rests entirely on RLS plus the PIN-checked `security definer` functions. Run `get_advisors` (security) after each migration.
+- **4-digit PIN**: the lockout keeps a brute-force attack to at most 5 tries a minute, about 1.4 days to cover every PIN. That is acceptable for this use. Switch to 6 digits if you want more margin.
 
 ## 10. Milestones
 
-1. **DB**: migrations (tables, RLS, RPCs), seed, PIN set
+1. **DB**: `kids_rewards` schema migrations (tables, RLS, RPCs with lockout), expose the schema, seed, set the PIN
 2. **Kids' views**: Missions + Boutique with the playful design, read-only
 3. **Parent mode**: PIN pad, idle lock, CRUD for tasks, rewards and categories
 4. **PWA + deploy**: manifest, icons, offline cache, Vercel deployment
