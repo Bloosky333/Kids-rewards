@@ -1,5 +1,7 @@
 # Kids Rewards — Specification
 
+> **Next version:** kids, daily planning and completions are specified in [`SPEC-planning.md`](SPEC-planning.md).
+
 ## 1. Purpose
 
 A tablet app that shows kids the **tasks** they can do to earn points and the **rewards** they can buy with those points. Parents configure both lists.
