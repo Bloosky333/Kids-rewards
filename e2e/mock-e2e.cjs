@@ -371,7 +371,8 @@ const until = async (fn, msg, ms = 5000) => { const t = Date.now(); while (!fn()
     await chip(col('Tom'), 'Faire son lit').click();
     await page.getByText("Tu peux cocher seulement aujourd'hui 🙂").waitFor();
     expect(!db.completions.some((c) => c.date !== today), 'no completion on another day');
-    await page.getByRole('button', { name: /Aujourd'hui/ }).click();
+    await page.waitForTimeout(400); await shot('14-other-day');
+    await page.getByRole('button', { name: /Revenir à aujourd'hui/i }).click();
     await page.locator('.daynav__badge').waitFor();
   });
   await step('Parent fixes yesterday from the board', async () => {

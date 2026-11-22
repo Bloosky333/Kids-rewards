@@ -73,7 +73,9 @@ export function KidColumn({ kid, board, index, isUndoable, busy, onTap }: Props)
 
       {kid.bonus.length > 0 && (
         <Link to={`/enfant/${kid.id}/bonus`} className="kidcol__bonus">
-          ✨ En plus aujourd'hui : {bonusLeft} mission{bonusLeft > 1 ? 's' : ''} bonus
+          {board.is_today
+            ? <>✨ En plus aujourd'hui : {bonusLeft} mission{bonusLeft > 1 ? 's' : ''} bonus</>
+            : <>✨ Missions bonus : {kid.bonus.length}</>}
         </Link>
       )}
     </section>

@@ -46,7 +46,9 @@ export function BoardPage() {
           <div className="daynav__label">
             <h1 className="daynav__date">{b ? formatDay(b.date) : '…'}</h1>
             {b && !b.is_today && (
-              <button className="daynav__today" onClick={() => setParams({})}>↩ Aujourd'hui</button>
+              <button className="daynav__today" onClick={() => setParams({})}>
+                <span aria-hidden="true">📅</span> Revenir à aujourd'hui
+              </button>
             )}
             {b?.is_today && <span className="daynav__badge">Aujourd'hui</span>}
           </div>
