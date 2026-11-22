@@ -284,9 +284,10 @@ const until = async (fn, msg, ms = 5000) => { const t = Date.now(); while (!fn()
     await shot('05-missions-admin');
   });
   await step('Board: one column per kid, slots, assignments', async () => {
-    await page.getByRole('link', { name: /Tableau/ }).click();
+    await page.getByRole('button', { name: /Verrouiller/ }).click();
     await col('Léa').waitFor();
     expect(await page.locator('.kidcol').count() === 2, 'two columns');
+    expect(await page.locator('.parent-strip').count() === 0, 'locked: no parent strip');
     await chip(col('Léa'), 'Devoirs').waitFor();
     expect(await chip(col('Tom'), 'Devoirs').count() === 0, 'Devoirs only for Léa');
     const titles = await col('Léa').locator('.slotgroup__title').allInnerTexts();
@@ -326,13 +327,15 @@ const until = async (fn, msg, ms = 5000) => { const t = Date.now(); while (!fn()
     await col('Léa').locator('.kidcol__pending', { hasText: '⏳ 3' }).waitFor();
     await page.locator('.lock-btn__badge', { hasText: '1' }).waitFor();
     await page.locator('.lock-btn').click();
+    await page.getByText('Tape le code parent').waitFor(); // locked earlier → code required again
+    await typePin('1234');
     await page.getByRole('heading', { name: '✅ À valider' }).waitFor();
     await page.locator('.row', { hasText: 'Devoirs' }).waitFor();
     await shot('08-approvals');
     await page.getByRole('button', { name: /Valider Devoirs pour Léa/ }).click();
     await page.getByText("Rien à valider pour l'instant.").waitFor();
     expect(comp(devoirs.id, lea.id, today).status === 'approved', 'approved');
-    await page.getByRole('link', { name: /Tableau/ }).click();
+    await page.getByRole('button', { name: /Verrouiller/ }).click();
     await chip(col('Léa'), 'Devoirs').and(page.locator('.is-done')).waitFor();
     expect(await page.locator('.lock-btn__badge').count() === 0, 'badge gone');
   });
@@ -349,6 +352,8 @@ const until = async (fn, msg, ms = 5000) => { const t = Date.now(); while (!fn()
     await page.waitForTimeout(300); await shot('10-kidspace-bonus');
     await page.getByRole('link', { name: /Boutique/ }).click();
     await page.getByText('Une glace').waitFor();
+    await page.getByRole('link', { name: 'Retour au tableau de la famille' }).click();
+    await col('Tom').waitFor();
   });
   await step('Kid space returns to the board after 2 min idle', async () => {
     await page.clock.install();
@@ -373,9 +378,10 @@ const until = async (fn, msg, ms = 5000) => { const t = Date.now(); while (!fn()
     await page.locator('.lock-btn').click();
     await page.getByText('Tape le code parent').waitFor().catch(() => {});
     if (await page.getByText('Tape le code parent').count()) await typePin('1234');
-    await page.getByRole('link', { name: /Tableau/ }).click();
+    await page.getByRole('link', { name: /Corriger un jour/ }).click();
+    await page.locator('.parent-strip').waitFor();
     await page.getByRole('button', { name: 'Jour précédent' }).click();
-    await page.getByText('🔓 Mode parent : tu peux corriger').waitFor();
+    await page.waitForTimeout(400); await shot('13-parent-strip');
     await chip(col('Tom'), 'Se brosser les dents').click();
     await until(() => db.completions.some((c) => c.date === addDays(today, -1) && c.kid_id === tom.id && c.status === 'approved' && c.approved_by_parent), 'past fix stored');
   });

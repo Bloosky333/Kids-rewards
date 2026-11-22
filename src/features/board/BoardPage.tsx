@@ -13,7 +13,7 @@ export function BoardPage() {
   const date = params.get('date') ?? 'today'
   const board = useBoard(date)
   const pending = usePendingCount()
-  const { pin } = useParentSession()
+  const { pin, lock } = useParentSession()
   const { toggle, untick, isUndoable, busy } = useTick(board.data)
   const [confirm, setConfirm] = useState<{ kid: BoardKid; item: BoardItem } | null>(null)
   const [phoneKid, setPhoneKid] = useState<string | null>(null)
@@ -58,10 +58,17 @@ export function BoardPage() {
         </Link>
       </header>
 
-      {b && !b.is_today && (
-        <p className="banner banner--info board__banner">
-          {pin ? '🔓 Mode parent : tu peux corriger ce jour en touchant les missions.' : "👀 Tu regardes un autre jour. Tu peux cocher seulement aujourd'hui."}
-        </p>
+      {pin && (
+        <div className="parent-strip" role="status">
+          <span className="parent-strip__text">🔓 <strong>Mode parent actif</strong> · touche une mission pour la cocher ou la décocher, n'importe quel jour</span>
+          <span className="parent-strip__actions">
+            <Link to="/parent" className="btn btn--small btn--ghost">⚙️ Retour au mode parent</Link>
+            <button className="btn btn--small" onClick={lock}>🔒 Verrouiller</button>
+          </span>
+        </div>
+      )}
+      {b && !b.is_today && !pin && (
+        <p className="banner banner--info board__banner">👀 Tu regardes un autre jour. Tu peux cocher seulement aujourd'hui.</p>
       )}
       {board.isError && b && <p className="banner banner--warn board__banner">📡 Pas de connexion : voici la dernière version connue.</p>}
 

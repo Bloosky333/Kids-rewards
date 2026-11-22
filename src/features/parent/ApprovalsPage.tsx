@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { listPending, setCompletionsStatus } from '../../lib/api'
 import { formatDay } from '../../lib/dates'
@@ -19,7 +20,12 @@ export function ApprovalsPage() {
     <section>
       <div className="admin-head">
         <h1>✅ À valider</h1>
-        {list.length > 1 && <button className="btn" onClick={() => act(list.map((c) => c.id), 'approved')}>✅ Tout valider ({list.length})</button>}
+        <div className="admin-head__actions">
+          <Link to="/" className="btn btn--ghost" title="Ouvre le tableau en restant en mode parent pour cocher ou décocher n'importe quel jour">
+            📋 Corriger un jour
+          </Link>
+          {list.length > 1 && <button className="btn" onClick={() => act(list.map((c) => c.id), 'approved')}>✅ Tout valider ({list.length})</button>}
+        </div>
       </div>
       {pending.isPending && <p className="muted">Chargement…</p>}
       {pending.isError && <p className="banner banner--warn">{(pending.error as Error).message}</p>}

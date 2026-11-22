@@ -39,7 +39,10 @@ export function KidSpace() {
   return (
     <div className={`kidspace ${kid ? `c-${kid.color}` : ''}`}>
       <header className="kidspace__head">
-        <Link to="/" className="btn btn--ghost btn--small kidspace__back">← Tableau</Link>
+        <Link to="/" className="backbtn" aria-label="Retour au tableau de la famille">
+          <span className="backbtn__icon" aria-hidden="true">🏠</span>
+          <span className="backbtn__label">Tableau</span>
+        </Link>
         {kid && (
           <div className="kidspace__who">
             <span className="kidspace__avatar" aria-hidden="true">{kid.emoji}</span>

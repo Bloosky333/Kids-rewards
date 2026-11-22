@@ -1,4 +1,4 @@
-import { Link, NavLink, Navigate, Route, Routes } from 'react-router-dom'
+import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import { usePendingCount } from '../../lib/queries'
 import { useParentSession } from './ParentSession'
 import { ApprovalsPage } from './ApprovalsPage'
@@ -15,10 +15,9 @@ export function ParentLayout() {
     <div className="parent">
       <header className="parent__banner">
         <span className="parent__title">🔓 Mode parent</span>
-        <span className="parent__actions">
-          <Link to="/" className="btn btn--small btn--ghost">📋 Tableau</Link>
-          <button className="btn btn--small btn--ghost" onClick={lock}>🔒 Verrouiller</button>
-        </span>
+        <button className="btn btn--small btn--ghost" onClick={lock} title="Quitter le mode parent et revenir au tableau">
+          🔒 Verrouiller
+        </button>
       </header>
       <nav className="parent__tabs" aria-label="Sections">
         <NavLink to="/parent" end>
