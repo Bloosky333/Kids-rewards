@@ -1,6 +1,8 @@
 # Missions & Boutique 🎯🎁
 
-A tablet-first PWA showing kids the **missions** (tasks) that earn coins and the **boutique** (rewards) they can buy. Parents edit both lists in a PIN-protected parent mode. Balances are tracked with physical fake bills and are out of scope. See [`SPEC.md`](SPEC.md).
+A tablet-first family **day board**, inspired by Skylight. It has one column per kid, with tasks planned by time of day (Matin, Midi, Après-midi, Soir). Kids tick their tasks with a celebration, open their own space (Ma journée · Missions bonus · Boutique), and see the points they earned today. Parents manage kids, schedules, approvals and rewards in a PIN-protected parent mode. Balances stay with physical fake bills.
+
+Specs: [`SPEC.md`](SPEC.md) (v1: catalog, PIN, design) and [`SPEC-planning.md`](SPEC-planning.md) (v2: kids, planning, completions).
 
 - **Stack:** React 18 + Vite + TypeScript, TanStack Query, `vite-plugin-pwa`, emoji-mart (French search via emojibase).
 - **Backend:** Supabase project *Personal*, dedicated `kids_rewards` schema. Migrations are in [`supabase/migrations`](supabase/migrations).
@@ -39,7 +41,8 @@ Live at **https://kids-rewards-rho.vercel.app**: Vercel project `kids-rewards`, 
 
 ## Tests
 
-`e2e/mock-e2e.cjs` drives the production build in Chromium against an in-memory mock of the Supabase API, covering 14 scenarios: kids' lists, PIN setup and lockout, CRUD, change PIN, idle lock and offline. See the header of the file for usage.
+- **Database:** `supabase/tests/v2_test.sql` holds 42 checks covering planning, team bonus, approvals, the once-a-day bonus rule, weekday rules, one-off items, archiving and permissions. Run it on a scratch Postgres after applying `supabase/migrations/*.sql`; it needs `anon`/`authenticated` roles and an `extensions` schema with `pgcrypto`.
+- **UI:** `e2e/mock-e2e.cjs` drives the production build in Chromium against an in-memory mock of the API. It covers 18 scenarios: kids, the task form, board ticking with undo, team bonus, approvals, kid space and idle return, other days, parent fixes, week plan, archiving, regressions, the phone layout and offline. See the header of the file for usage.
 
 ## Install on the tablet
 

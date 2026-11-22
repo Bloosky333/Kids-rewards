@@ -1,18 +1,20 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
-import { KidsLayout } from './features/kids/KidsLayout'
-import { MissionsPage } from './features/kids/MissionsPage'
-import { ShopPage } from './features/kids/ShopPage'
+import { BoardPage } from './features/board/BoardPage'
+import { KidSpace } from './features/kidspace/KidSpace'
 import { ParentGate } from './features/parent/ParentGate'
 import { ParentSessionProvider } from './features/parent/ParentSession'
 
 export default function App() {
   return (
     <ParentSessionProvider>
+      <div className="bg" aria-hidden="true">
+        <span className="bg__blob bg__blob--1" />
+        <span className="bg__blob bg__blob--2" />
+        <span className="bg__blob bg__blob--3" />
+      </div>
       <Routes>
-        <Route element={<KidsLayout />}>
-          <Route index element={<MissionsPage />} />
-          <Route path="boutique" element={<ShopPage />} />
-        </Route>
+        <Route index element={<BoardPage />} />
+        <Route path="enfant/:kidId/*" element={<KidSpace />} />
         <Route path="parent/*" element={<ParentGate />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

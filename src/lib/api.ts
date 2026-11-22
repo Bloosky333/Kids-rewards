@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { Category, CategoryKind, Frequency, Reward, RpcError, RpcResult, Task } from './types'
+import type { Board, Category, CategoryKind, Kid, PendingCompletion, Reward, RpcError, RpcResult, Slot, Task, TaskKind, WeekDay, Weekday } from './types'
 
 // ---------- public reads (RLS hides inactive items) ----------
 
@@ -11,14 +11,6 @@ export async function fetchCategories(): Promise<Category[]> {
     .order('name')
   if (error) throw error
   return data as Category[]
-}
-
-export async function fetchTasks(): Promise<Task[]> {
-  // select('*') + normalisation keeps this working whether or not the
-  // description/team_points migration has been applied yet.
-  const { data, error } = await supabase.from('tasks').select('*').order('points').order('name')
-  if (error) throw error
-  return (data as Partial<Task>[]).map((t) => ({ ...t, description: t.description ?? null, team_points: t.team_points ?? null }) as Task)
 }
 
 export async function fetchRewards(): Promise<Reward[]> {
@@ -60,33 +52,37 @@ export interface TaskInput {
   emoji: string
   points: number
   category_id: string
-  frequency: Frequency
   active: boolean
   description: string | null
   team_points: number | null
+  kind: TaskKind
+  assign_all: boolean
+  kid_ids: string[]
+  days: Weekday[] | null
+  slot: Slot
+  at_time: string | null
+  needs_approval: boolean
 }
-export async function upsertTask(pin: string, t: TaskInput): Promise<RpcResult<Task>> {
-  const base = {
+export const saveTask = (pin: string, t: TaskInput) =>
+  rpc<Task>('save_task', {
     p_pin: pin,
     p_id: t.id,
     p_name: t.name,
     p_emoji: t.emoji,
     p_points: t.points,
     p_category_id: t.category_id,
-    p_frequency: t.frequency,
     p_active: t.active,
-  }
-  const { data, error } = await supabase.rpc('upsert_task', { ...base, p_description: t.description, p_team_points: t.team_points })
-  if (!error) return data as RpcResult<Task>
-  // PGRST202 = no function with these parameters: DB not migrated yet → save without the new fields.
-  if (error.code === 'PGRST202') {
-    console.warn('[rpc upsert_task] new parameters not available yet; saving without description/team points')
-    return rpc<Task>('upsert_task', base)
-  }
-  console.error('[rpc upsert_task]', error)
-  return { ok: false, error: 'network' }
-}
-export const deleteTask = (pin: string, id: string) => rpc<null>('delete_task', { p_pin: pin, p_id: id })
+    p_description: t.description,
+    p_team_points: t.team_points,
+    p_kind: t.kind,
+    p_assign_all: t.assign_all,
+    p_kid_ids: t.kid_ids,
+    p_days: t.kind === 'planned' ? t.days : null,
+    p_slot: t.slot,
+    p_at_time: t.at_time,
+    p_needs_approval: t.needs_approval,
+  })
+export const archiveTask = (pin: string, id: string) => rpc<null>('archive_task', { p_pin: pin, p_id: id })
 
 export interface RewardInput {
   id: string | null
@@ -128,6 +124,54 @@ export const reorderCategories = (pin: string, kind: CategoryKind, ids: string[]
   rpc<null>('reorder_categories', { p_pin: pin, p_kind: kind, p_ids: ids })
 export const deleteCategory = (pin: string, id: string) => rpc<null>('delete_category', { p_pin: pin, p_id: id })
 
+// ---------- kids & day board (public) ----------
+
+export async function fetchKids(): Promise<Kid[]> {
+  const { data, error } = await supabase.from('kids').select('id, name, emoji, color, sort_order, active').order('sort_order').order('name')
+  if (error) throw error
+  return data as Kid[]
+}
+
+export async function fetchBoard(date?: string): Promise<Board> {
+  const { data, error } = await supabase.rpc('day_board', date ? { p_date: date } : {})
+  if (error) throw error
+  return data as Board
+}
+
+export async function fetchPendingCount(): Promise<number> {
+  const { data, error } = await supabase.rpc('pending_count')
+  if (error) throw error
+  return data as number
+}
+
+export async function fetchWeekPlan(kidId: string, from: string): Promise<WeekDay[]> {
+  const { data, error } = await supabase.rpc('week_plan', { p_kid: kidId, p_from: from })
+  if (error) throw error
+  return data as WeekDay[]
+}
+
+export type CompleteResult = { status: 'pending' | 'approved'; team_completed: boolean; earned: number }
+export const completeTask = (kidId: string, taskId: string) => rpc<CompleteResult>('complete_task', { p_kid: kidId, p_task: taskId })
+export const uncompleteTask = (kidId: string, taskId: string) => rpc<null>('uncomplete_task', { p_kid: kidId, p_task: taskId })
+
+// ---------- kids, approvals & planning (parent) ----------
+
+export const adminListKids = (pin: string) => rpc<Kid[]>('admin_list_kids', { p_pin: pin })
+export interface KidInput { id: string | null; name: string; emoji: string; color: string; active: boolean }
+export const upsertKid = (pin: string, k: KidInput) =>
+  rpc<Kid>('upsert_kid', { p_pin: pin, p_id: k.id, p_name: k.name, p_emoji: k.emoji, p_color: k.color, p_active: k.active })
+export const reorderKids = (pin: string, ids: string[]) => rpc<null>('reorder_kids', { p_pin: pin, p_ids: ids })
+
+export const listPending = (pin: string) => rpc<PendingCompletion[]>('list_pending', { p_pin: pin })
+export const setCompletionsStatus = (pin: string, ids: string[], status: 'approved' | 'cancelled') =>
+  rpc<{ updated: number }>('set_completions_status', { p_pin: pin, p_ids: ids, p_status: status })
+export const setCompletion = (pin: string, kidId: string, taskId: string, date: string, done: boolean) =>
+  rpc<null>('set_completion', { p_pin: pin, p_kid: kidId, p_task: taskId, p_date: date, p_done: done })
+
+export const addPlannedItems = (pin: string, taskId: string, kidIds: string[], date: string, slot: Slot, atTime: string | null) =>
+  rpc<null>('add_planned_items', { p_pin: pin, p_task: taskId, p_kid_ids: kidIds, p_date: date, p_slot: slot, p_at_time: atTime })
+export const removePlannedItem = (pin: string, id: string) => rpc<null>('remove_planned_item', { p_pin: pin, p_id: id })
+
 // ---------- French error messages ----------
 
 export function errorMessage(r: { error: RpcError; retry_after?: number; count?: number }): string {
@@ -152,6 +196,12 @@ export function errorMessage(r: { error: RpcError; retry_after?: number; count?:
       return `Cette catégorie contient ${r.count ?? 'des'} élément(s). Déplace-les d'abord.`
     case 'not_found':
       return "Cet élément n'existe plus"
+    case 'not_planned':
+      return "Cette mission n'est pas prévue pour toi aujourd'hui"
+    case 'already_done':
+      return 'Déjà fait aujourd’hui ✅'
+    case 'approved_by_parent':
+      return 'Déjà validé par un parent 🔒'
     case 'network':
     default:
       return 'Oups, problème de connexion. Réessaie !'

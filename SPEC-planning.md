@@ -1,6 +1,6 @@
 # Kids Rewards v2 — Kids, daily planning & completions
 
-Status: **spec, not implemented**. It extends [`SPEC.md`](SPEC.md) (v1: task/reward catalog, parent PIN, Candy Glass UI).
+Status: **implemented** (see §10 for differences from this spec). It extends [`SPEC.md`](SPEC.md) (v1: task/reward catalog, parent PIN, Candy Glass UI).
 Inspiration: Skylight Calendar (family day board, per-person chore lists, stars and rewards, celebrations).
 
 ## 1. Goals
@@ -212,3 +212,22 @@ Week view on the board, 🔥 streaks and history charts, night mode and screensa
 
 - Should rewards in the Boutique eventually be "bought" with real balances? That would require the balance option deferred in §7.
 - Should a kid be able to see their siblings' columns? (Yes by default, since it's a family board.)
+
+## 10. Implementation notes (differences from the spec above)
+
+- **Nothing is ever removed in the database:**
+  - completions get a `cancelled` status (un-ticking, or a parent refusing);
+  - one-off items get a `removed` flag;
+  - tasks are archived;
+  - kids can only be deactivated.
+
+  As a side effect, the migrations contain no DROP, DELETE or REVOKE, so they apply through the Supabase connector without a confirmation prompt.
+- **Assignment** is stored as `tasks.kid_ids uuid[]` instead of a `task_kids` table.
+- **Team bonus** applies only when **at least 2 kids** are assigned on that day. A task assigned to a single kid never earns team points.
+- **The old `frequency` column** is kept but no longer used.
+- **The board** refreshes every minute and whenever the app comes back to the foreground, so ticks made on another device show up.
+- **The week plan window** jumps to the week of a newly added one-off item.
+- **Tests:**
+  - `supabase/tests/v2_test.sql` holds 42 SQL checks, run against a local Postgres.
+  - `e2e/mock-e2e.cjs` covers 18 browser scenarios against an in-memory mock of the API.
+
