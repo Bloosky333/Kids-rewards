@@ -1,6 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { Link, NavLink, Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom'
-import { ConfirmDialog } from '../../components/Modal'
 import { KID_SPACE_IDLE_MS, slotInfo } from '../../lib/constants'
 import { formatDay } from '../../lib/dates'
 import { useBoard } from '../../lib/queries'
@@ -48,10 +47,7 @@ export function KidSpace() {
             <span className="kidspace__avatar" aria-hidden="true">{kid.emoji}</span>
             <div>
               <div className="kidspace__name">{kid.name}</div>
-              <div className="kidspace__pts">
-                ★ {kid.totals.approved} aujourd'hui
-                {kid.totals.pending > 0 && <span className="kidcol__pending"> ⏳ {kid.totals.pending}</span>}
-              </div>
+              <div className="kidspace__pts">★ {kid.totals.approved} aujourd'hui</div>
             </div>
           </div>
         )}
@@ -62,16 +58,14 @@ export function KidSpace() {
         ) : (
           <Routes>
             <Route index element={<MyDay kid={kid} />} />
-            <Route path="bonus" element={<Bonus kid={kid} />} />
             <Route path="boutique" element={<ShopPage />} />
             <Route path="*" element={<Navigate to="" replace />} />
           </Routes>
         )}
       </main>
       <nav className="tabbar" aria-label="Navigation">
-        <div className="dock dock--3">
+        <div className="dock">
           <NavLink to={`/enfant/${kidId}`} end className="dock__tab"><span className="dock__emoji" aria-hidden="true">📅</span><span>Ma journée</span></NavLink>
-          <NavLink to={`/enfant/${kidId}/bonus`} className="dock__tab"><span className="dock__emoji" aria-hidden="true">✨</span><span>Bonus</span></NavLink>
           <NavLink to={`/enfant/${kidId}/boutique`} className="dock__tab"><span className="dock__emoji" aria-hidden="true">🎁</span><span>Boutique</span></NavLink>
         </div>
       </nav>
@@ -79,38 +73,20 @@ export function KidSpace() {
   )
 }
 
-function useKidTick() {
-  const board = useBoard('today')
-  const tick = useTick(board.data)
-  const [confirm, setConfirm] = useState<{ kid: BoardKid; item: BoardItem | BonusItem } | null>(null)
-  const onTap = async (kid: BoardKid, item: BoardItem | BonusItem, el: HTMLElement | null) => {
-    if ((await tick.toggle(kid, item, el)) === 'confirm-untick') setConfirm({ kid, item })
-  }
-  const dialog = confirm && (
-    <ConfirmDialog
-      title="Annuler cette mission ?"
-      message={<>« {confirm.item.emoji} {confirm.item.name} » ne sera plus cochée.</>}
-      confirmLabel="Oui, annuler"
-      onCancel={() => setConfirm(null)}
-      onConfirm={async () => {
-        await tick.untick(confirm.kid, confirm.item)
-        setConfirm(null)
-      }}
-    />
-  )
-  return { ...tick, onTap, dialog, board: board.data }
-}
-
 function MyDay({ kid }: { kid: BoardKid }) {
-  const { onTap, isUndoable, busy, dialog, board } = useKidTick()
+  const board = useBoard('today').data
+  const { toggle, busy } = useTick(board)
   const now = currentSlot()
   const groups = groupBySlot(kid.items).sort((a, b) => Number(b.slot === now) - Number(a.slot === now))
+  const chip = (it: BoardItem | BonusItem) => (
+    <TaskChip key={it.task_id} item={it} size="lg" busy={busy === `${kid.id}:${it.task_id}`} onTap={(el) => toggle(kid, it, el)} />
+  )
   return (
     <section className="page">
       <h1 className="page-title"><span aria-hidden="true">📅</span> Ma journée</h1>
       {board && <p className="muted page-sub">{formatDay(board.date)}</p>}
-      {groups.length === 0 && (
-        <div className="empty"><p className="empty__emoji">🌈</p><p>Rien de prévu aujourd'hui. Regarde les missions bonus ✨</p></div>
+      {groups.length === 0 && kid.bonus.length === 0 && (
+        <div className="empty"><p className="empty__emoji">🌈</p><p>Rien de prévu aujourd'hui.</p></div>
       )}
       {groups.map((g) => {
         const s = slotInfo(g.slot)
@@ -120,35 +96,17 @@ function MyDay({ kid }: { kid: BoardKid }) {
               <span className="group__icon" aria-hidden="true">{s.emoji}</span>{s.label}
               {g.slot === now && <span className="slotgroup__now">maintenant</span>}
             </h2>
-            <div className="bigchips">
-              {g.items.map((it) => (
-                <TaskChip key={it.task_id} item={it} size="lg" undoable={isUndoable(kid.id, it.task_id)} busy={busy === `${kid.id}:${it.task_id}`} onTap={(el) => onTap(kid, it, el)} />
-              ))}
-            </div>
+            <div className="bigchips">{g.items.map(chip)}</div>
           </section>
         )
       })}
-      {dialog}
-    </section>
-  )
-}
-
-function Bonus({ kid }: { kid: BoardKid }) {
-  const { onTap, isUndoable, busy, dialog } = useKidTick()
-  return (
-    <section className="page">
-      <h1 className="page-title"><span aria-hidden="true">✨</span> Missions bonus</h1>
-      <p className="muted page-sub">Une fois par jour, quand tu veux !</p>
-      {kid.bonus.length === 0 ? (
-        <div className="empty"><p className="empty__emoji">🙂</p><p>Pas de mission bonus pour le moment.</p></div>
-      ) : (
-        <div className="bigchips">
-          {kid.bonus.map((it) => (
-            <TaskChip key={it.task_id} item={it} size="lg" undoable={isUndoable(kid.id, it.task_id)} busy={busy === `${kid.id}:${it.task_id}`} onTap={(el) => onTap(kid, it, el)} />
-          ))}
-        </div>
+      {kid.bonus.length > 0 && (
+        <section className="group group--bonus">
+          <h2 className="group__title"><span className="group__icon" aria-hidden="true">🎁</span>Bonus</h2>
+          <p className="muted page-sub">En plus, si tu veux : une fois par jour ✨</p>
+          <div className="bigchips">{kid.bonus.map(chip)}</div>
+        </section>
       )}
-      {dialog}
     </section>
   )
 }

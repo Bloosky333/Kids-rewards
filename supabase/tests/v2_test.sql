@@ -51,7 +51,7 @@ select pg_temp.check((kids_rewards.day_board()->'kids'->0->'totals'->>'pending')
 select pg_temp.check(jsonb_array_length(kids_rewards.list_pending('1234')->'data') = 1, 'list_pending has 1');
 select pg_temp.check((kids_rewards.set_completions_status('1234',
   array[(kids_rewards.list_pending('1234')->'data'->0->>'id')::uuid], 'approved')->'data'->>'updated')::int = 1, 'approve');
-select pg_temp.check(kids_rewards.uncomplete_task(current_setting('t.lea')::uuid, current_setting('t.appr')::uuid)->>'error' = 'approved_by_parent', 'kid cannot untick parent-approved');
+select pg_temp.check((kids_rewards.uncomplete_task(current_setting('t.lea')::uuid, current_setting('t.appr')::uuid)->>'ok')::boolean, 'kid can untick (no parent validation anymore)');
 select pg_temp.check(kids_rewards.pending_count() = 0, 'pending count back to 0');
 
 -- bonus: once per day

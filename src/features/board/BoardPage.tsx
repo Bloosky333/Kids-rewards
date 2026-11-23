@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { ConfirmDialog } from '../../components/Modal'
 import { addDays, formatDay } from '../../lib/dates'
-import { useBoard, usePendingCount } from '../../lib/queries'
-import type { BoardItem, BoardKid } from '../../lib/types'
+import { useBoard } from '../../lib/queries'
+import type { BoardItem, BoardKid, BonusItem } from '../../lib/types'
 import { useParentSession } from '../parent/ParentSession'
 import { KidColumn } from './KidColumn'
 import { useTick } from './useTick'
@@ -12,10 +11,8 @@ export function BoardPage() {
   const [params, setParams] = useSearchParams()
   const date = params.get('date') ?? 'today'
   const board = useBoard(date)
-  const pending = usePendingCount()
   const { pin, lock } = useParentSession()
-  const { toggle, untick, isUndoable, busy } = useTick(board.data)
-  const [confirm, setConfirm] = useState<{ kid: BoardKid; item: BoardItem } | null>(null)
+  const { toggle, busy } = useTick(board.data)
   const [phoneKid, setPhoneKid] = useState<string | null>(null)
 
   const b = board.data
@@ -33,10 +30,7 @@ export function BoardPage() {
   const kids = b?.kids ?? []
   const selected = kids.find((k) => k.id === phoneKid) ?? kids[0]
 
-  const onTap = async (kid: BoardKid, item: BoardItem, el: HTMLElement | null) => {
-    const r = await toggle(kid, item, el)
-    if (r === 'confirm-untick') setConfirm({ kid, item })
-  }
+  const onTap = (kid: BoardKid, item: BoardItem | BonusItem, el: HTMLElement | null) => toggle(kid, item, el)
 
   return (
     <div className="board">
@@ -54,9 +48,8 @@ export function BoardPage() {
           </div>
           <button className="icon-btn daynav__btn" onClick={() => go(1)} aria-label="Jour suivant" disabled={!b}>▶</button>
         </div>
-        <Link to="/parent" className="lock-btn lock-btn--inline" aria-label={`Mode parent${pending.data ? `, ${pending.data} à valider` : ''}`}>
+        <Link to="/parent" className="lock-btn lock-btn--inline" aria-label="Mode parent">
           {pin ? '🔓' : '🔒'}
-          {!!pending.data && <span className="lock-btn__badge">{pending.data}</span>}
         </Link>
       </header>
 
@@ -102,25 +95,13 @@ export function BoardPage() {
           <div className={`board__cols board__cols--${Math.min(kids.length, 4)}`}>
             {kids.map((k, i) => (
               <div key={k.id} className={`board__col ${selected?.id === k.id ? 'is-selected' : ''}`}>
-                <KidColumn kid={k} board={b!} index={i} isUndoable={isUndoable} busy={busy} onTap={onTap} />
+                <KidColumn kid={k} board={b!} index={i} busy={busy} onTap={onTap} />
               </div>
             ))}
           </div>
         </>
       )}
 
-      {confirm && (
-        <ConfirmDialog
-          title="Annuler cette mission ?"
-          message={<>« {confirm.item.emoji} {confirm.item.name} » ne sera plus cochée pour {confirm.kid.name}.</>}
-          confirmLabel="Oui, annuler"
-          onCancel={() => setConfirm(null)}
-          onConfirm={async () => {
-            await untick(confirm.kid, confirm.item)
-            setConfirm(null)
-          }}
-        />
-      )}
     </div>
   )
 }

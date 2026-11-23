@@ -251,7 +251,7 @@ const until = async (fn, msg, ms = 5000) => { const t = Date.now(); while (!fn()
     lea = db.kids.find((k) => k.name === 'Léa'); tom = db.kids.find((k) => k.name === 'Tom');
     expect(lea && lea.emoji === '🦊' && tom && tom.color === 'blue', JSON.stringify(db.kids));
   });
-  await step('Create a planned team mission (every day, 19:00) and an approval mission for Léa only', async () => {
+  await step('Create a planned team mission (every day, 19:00) and a mission for Léa only', async () => {
     await page.getByRole('link', { name: /Missions/ }).click();
     await page.getByRole('button', { name: /Nouvelle mission/ }).click();
     await page.getByPlaceholder('Faire son lit').fill('Ranger le salon');
@@ -274,12 +274,10 @@ const until = async (fn, msg, ms = 5000) => { const t = Date.now(); while (!fn()
     for (const d of ['Samedi', 'Dimanche']) await page.getByRole('button', { name: d }).click(); // add back: every day
     await page.getByRole('button', { name: /Après-midi/ }).click();
     await page.getByLabel('Plus', { exact: true }).click(); await page.getByLabel('Plus', { exact: true }).click();
-    await page.getByText('🔐 Un parent doit valider').click();
-    expect(await page.getByLabel('Un parent doit valider').isChecked(), 'approval switch on');
+    expect(await page.getByText('Un parent doit valider').count() === 0, 'no approval option anymore');
     await page.getByRole('button', { name: 'Enregistrer' }).click(); await dialogClosed();
     devoirs = db.tasks.find((t) => t.name === 'Devoirs');
-    expect(devoirs && !devoirs.assign_all && devoirs.kid_ids[0] === lea.id && devoirs.needs_approval && devoirs.slot === 'afternoon' && devoirs.points === 3, JSON.stringify(devoirs));
-    await page.locator('.row', { hasText: 'Devoirs' }).getByText('🔐 À valider').waitFor();
+    expect(devoirs && !devoirs.assign_all && devoirs.kid_ids[0] === lea.id && !devoirs.needs_approval && devoirs.slot === 'afternoon' && devoirs.points === 3, JSON.stringify(devoirs));
     await page.locator('.row', { hasText: 'Ranger le salon' }).getByText(/Tous les jours · 🌙 19:00/).waitFor();
     await shot('05-missions-admin');
   });
@@ -292,25 +290,25 @@ const until = async (fn, msg, ms = 5000) => { const t = Date.now(); while (!fn()
     expect(await chip(col('Tom'), 'Devoirs').count() === 0, 'Devoirs only for Léa');
     const titles = await col('Léa').locator('.slotgroup__title').allInnerTexts();
     expect(/matin/i.test(titles[0]) && titles.some((t) => /soir/i.test(t)), titles.join('|'));
+    expect(await page.locator('.kidcol__count, .kidcol__bar').count() === 0, 'no x/x progress in headers');
+    const groups = col('Léa').locator('.slotgroup');
+    await groups.last().and(page.locator('.slotgroup--bonus')).locator('.chip-task', { hasText: 'Mettre la table' }).waitFor();
+    expect(await page.getByText(/En plus aujourd/).count() === 0, 'no bonus link footer');
     await page.waitForTimeout(700); await shot('06-board');
   });
-  await step('Tick with undo, then re-tick', async () => {
+  await step('One tap toggles: tick, untick, tick again (no confirm, no undo window)', async () => {
     const c = chip(col('Léa'), 'Faire son lit');
     await c.click();
     await until(() => comp(db.tasks[0].id, lea.id, today), 'completion stored');
-    await c.locator('.chip-task__undo').waitFor();
+    await c.and(page.locator('.is-done')).waitFor();
     await page.waitForTimeout(250); await shot('07-ticked');
+    await page.waitForTimeout(1200);
     await c.click();
-    await until(() => !comp(db.tasks[0].id, lea.id, today), 'undo cancels');
-    await page.waitForTimeout(300);
+    await until(() => !comp(db.tasks[0].id, lea.id, today), 'untick right away');
+    expect(await page.getByRole('dialog').count() === 0, 'no confirmation dialog');
+    await c.and(page.locator('.is-todo')).waitFor();
     await c.click();
     await until(() => comp(db.tasks[0].id, lea.id, today), 're-ticked');
-    await c.locator('.chip-task__undo').waitFor({ state: 'detached', timeout: 7000 });
-    await c.click();
-    await page.getByText('Annuler cette mission ?').waitFor();
-    await page.getByRole('button', { name: 'Non' }).or(page.getByRole('button', { name: 'Annuler', exact: true })).first().click();
-    await dialogClosed();
-    expect(comp(db.tasks[0].id, lea.id, today), 'still done after cancelling the confirm');
   });
   await step('Team bonus applies when both kids finish', async () => {
     await chip(col('Léa'), 'Ranger le salon').click();
@@ -321,31 +319,21 @@ const until = async (fn, msg, ms = 5000) => { const t = Date.now(); while (!fn()
     await chip(col('Léa'), 'Ranger le salon').locator('.chip-task__pts.is-team', { hasText: '★ 3' }).waitFor();
     await col('Léa').locator('.kidcol__earned', { hasText: '★ 5' }).waitFor(); // 2 (lit) + 3 (team)
   });
-  await step('Approval: pending ⏳, badge on lock, validate in À valider', async () => {
+  await step('Ticks count immediately (no parent validation)', async () => {
     await chip(col('Léa'), 'Devoirs').click();
-    await chip(col('Léa'), 'Devoirs').and(page.locator('.is-pending')).waitFor();
-    await col('Léa').locator('.kidcol__pending', { hasText: '⏳ 3' }).waitFor();
-    await page.locator('.lock-btn__badge', { hasText: '1' }).waitFor();
-    await page.locator('.lock-btn').click();
-    await page.getByText('Tape le code parent').waitFor(); // locked earlier → code required again
-    await typePin('1234');
-    await page.getByRole('heading', { name: '✅ À valider' }).waitFor();
-    await page.locator('.row', { hasText: 'Devoirs' }).waitFor();
-    await shot('08-approvals');
-    await page.getByRole('button', { name: /Valider Devoirs pour Léa/ }).click();
-    await page.getByText("Rien à valider pour l'instant.").waitFor();
-    expect(comp(devoirs.id, lea.id, today).status === 'approved', 'approved');
-    await page.getByRole('button', { name: /Verrouiller/ }).click();
     await chip(col('Léa'), 'Devoirs').and(page.locator('.is-done')).waitFor();
-    expect(await page.locator('.lock-btn__badge').count() === 0, 'badge gone');
+    expect(comp(devoirs.id, lea.id, today).status === 'approved', 'approved directly');
+    await col('Léa').locator('.kidcol__earned', { hasText: '★ 8' }).waitFor(); // 2 + 3 (team) + 3
+    expect(await page.locator('.lock-btn__badge, .kidcol__pending, .is-pending').count() === 0, 'no pending UI');
   });
-  await step('Kid space: Ma journée, bonus once per day, boutique', async () => {
+  await step('Kid space: Ma journée with bonus at the end, boutique; no Bonus tab', async () => {
     await page.locator('.kidcol__avatar').first().click();
     await page.getByRole('heading', { name: /Ma journée/ }).waitFor();
     await page.locator('.kidspace__name', { hasText: 'Léa' }).waitFor();
     await page.waitForTimeout(500); await shot('09-kidspace-day');
-    await page.getByRole('link', { name: /Bonus/ }).click();
-    const bonus = page.locator('.chip-task', { hasText: 'Mettre la table' });
+    expect(await page.locator('.dock__tab').count() === 2, 'two tabs: Ma journée + Boutique');
+    const bonus = page.locator('.group--bonus .chip-task', { hasText: 'Mettre la table' });
+    expect(await page.locator('.group').last().evaluate((el) => el.classList.contains('group--bonus')), 'bonus is the last section');
     await bonus.click();
     await until(() => comp(db.tasks[2].id, lea.id, today), 'bonus done');
     await bonus.and(page.locator('.is-done')).waitFor();
@@ -403,17 +391,10 @@ const until = async (fn, msg, ms = 5000) => { const t = Date.now(); while (!fn()
     await until(() => p.removed, 'one-off removed');
     await page.keyboard.press('Escape');
   });
-  await step('Refusing a pending completion lets the kid redo it', async () => {
-    await page.goto(BASE + '/');
-    await col('Léa').waitFor();
-    // make Devoirs pending again: parent approved → kid can't untick; use a new approval task for Tom
-    const t = db.tasks.find((x) => x.name === 'Mettre la table'); t.needs_approval = true;
-    await page.locator('.kidcol__bonus').last().click();
-    await page.locator('.chip-task', { hasText: 'Mettre la table' }).click();
-    await until(() => comp(t.id, tom.id, today)?.status === 'pending', 'tom pending');
+  await step('Parent mode has no À valider tab', async () => {
     await gotoParent('/parent');
-    await page.getByRole('button', { name: /Refuser Mettre la table pour Tom/ }).click();
-    await until(() => !comp(t.id, tom.id, today), 'refused → cancelled');
+    await page.getByRole('heading', { name: '🎯 Missions' }).waitFor();
+    expect(await page.getByText('À valider').count() === 0, 'no approvals tab');
   });
   await step('Archive a mission removes it from the board', async () => {
     await gotoParent('/parent/missions');

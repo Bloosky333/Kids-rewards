@@ -17,7 +17,7 @@ import { useAdminAction, useAdminQueryFn } from './useAdmin'
 const toDraft = (t: Task): TaskDraft => ({
   id: t.id, name: t.name, emoji: t.emoji, points: t.points, category_id: t.category_id, active: t.active,
   description: t.description ?? '', team: t.team_points, kind: t.kind, assign_all: t.assign_all, kid_ids: t.kid_ids ?? [],
-  days: t.days ?? [1, 2, 3, 4, 5, 6, 7], slot: t.slot, at_time: hhmm(t.at_time) ?? '', needs_approval: t.needs_approval,
+  days: t.days ?? [1, 2, 3, 4, 5, 6, 7], slot: t.slot, at_time: hhmm(t.at_time) ?? '',
 })
 
 const BANNER_KEY = 'kr-v2-plan-check-dismissed'
@@ -49,14 +49,14 @@ export function TasksAdmin() {
       id: d.id, name: d.name, emoji: d.emoji, points: d.points, category_id: d.category_id, active: d.active,
       description: d.description || null, team_points: d.team, kind: d.kind, assign_all: d.assign_all,
       kid_ids: d.assign_all ? [] : d.kid_ids, days: d.kind === 'planned' ? d.days : null, slot: d.slot,
-      at_time: d.kind === 'planned' && d.at_time ? d.at_time : null, needs_approval: d.needs_approval,
+      at_time: d.kind === 'planned' && d.at_time ? d.at_time : null, needs_approval: false,
     }), d.id ? 'Modifié ✅' : 'Ajouté ✅')
     if (res.ok) setEditing(null)
   }
 
   const newDraft = (): TaskDraft => ({
     id: null, name: '', emoji: '', points: 1, category_id: taskCats[0]?.id ?? '', active: true, description: '', team: null,
-    kind: 'planned', assign_all: true, kid_ids: [], days: [1, 2, 3, 4, 5, 6, 7], slot: 'anytime', at_time: '', needs_approval: false,
+    kind: 'planned', assign_all: true, kid_ids: [], days: [1, 2, 3, 4, 5, 6, 7], slot: 'anytime', at_time: '',
   })
 
   const who = (t: Task) => t.assign_all ? 'Tous' : t.kid_ids.map((id) => kidById.get(id)?.emoji ?? '❔').join(' ')
@@ -66,6 +66,7 @@ export function TasksAdmin() {
       <div className="admin-head">
         <h1>🎯 Missions</h1>
         <div className="admin-head__actions">
+          <Link to="/" className="btn btn--ghost" title="Ouvre le tableau en restant en mode parent pour cocher ou décocher n'importe quel jour">📋 Corriger un jour</Link>
           <button className="btn btn--ghost" onClick={() => setWeek(true)} disabled={activeKids.length === 0}>📅 Planning de la semaine</button>
           <button className="btn" onClick={() => setEditing(newDraft())} disabled={taskCats.length === 0}>➕ Nouvelle mission</button>
         </div>
@@ -108,7 +109,6 @@ export function TasksAdmin() {
                         : <>✨ Bonus</>}
                       {' · '}{who(t)}
                     </span>
-                    {t.needs_approval && <span className="tag">🔐 À valider</span>}
                     {!t.active && <span className="tag">Masquée</span>}
                   </span>
                 </span>

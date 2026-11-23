@@ -20,7 +20,6 @@ export interface TaskDraft {
   days: Weekday[]
   slot: Slot
   at_time: string
-  needs_approval: boolean
 }
 
 interface Props {
@@ -187,10 +186,6 @@ export function TaskForm({ draft, categories, kids, onCancel, onSave }: Props) {
           )}
         </div>
 
-        <label className="field field--inline">
-          <Switch checked={d.needs_approval} onChange={(v) => set('needs_approval', v)} label="Un parent doit valider" />
-          <span>🔐 Un parent doit valider</span>
-        </label>
         <label className="field field--inline">
           <Switch checked={d.active} onChange={(v) => set('active', v)} label="Visible" />
           <span>{d.active ? 'Visible pour les enfants' : 'Masquée pour les enfants'}</span>

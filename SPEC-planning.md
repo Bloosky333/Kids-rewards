@@ -231,3 +231,11 @@ Week view on the board, 🔥 streaks and history charts, night mode and screensa
   - `supabase/tests/v2_test.sql` holds 42 SQL checks, run against a local Postgres.
   - `e2e/mock-e2e.cjs` covers 18 browser scenarios against an in-memory mock of the API.
 
+
+## 11. Changes after first use (23 Nov)
+
+- **Parent validation is removed.** Every tick counts immediately. The À valider tab, the badge on 🔒, the ⏳ states and the "Un parent doit valider" option are gone. Migration `20261123090000_kids_rewards_no_approval.sql` turned approval off on every task and counted pending ticks as done. The column and the approval functions stay unused in the database.
+- **Ticking is a simple toggle.** One tap ticks with a celebration, another tap unticks, with no confirmation and no undo window. Kids can untick any of today's ticks.
+- **The board header** shows only the avatar, the name and today's ★. The "x/x" count and the progress bar are removed.
+- **Bonus missions** sit at the bottom of each column, under "N'importe quand", in a **🎁 Bonus** group. In the kid space they end the **Ma journée** tab, and the separate Bonus tab is removed (tabs: Ma journée · Boutique).
+- **Parent mode** opens on 🎯 Missions. "📋 Corriger un jour" moved to the Missions header.

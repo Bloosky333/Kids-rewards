@@ -757,3 +757,7 @@ a { color: var(--violet); }
 .parent-strip__actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .parent-strip .btn--ghost { color: var(--ink); }
 .parent-strip .btn:not(.btn--ghost) { background: #fff; color: #5b21b6; box-shadow: none; }
+
+/* bonus missions at the bottom of a column / of Ma journée */
+.slotgroup--bonus { margin-top: 4px; padding-top: 12px; border-top: 2px dashed color-mix(in srgb, var(--cs, #8b5cf6) 45%, transparent); border-radius: 0; }
+.group--bonus { margin-top: 34px; }
